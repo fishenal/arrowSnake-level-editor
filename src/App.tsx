@@ -13,7 +13,11 @@ import {
   List,
   message,
 } from "antd";
-import { generateRandomLevelFunc, validateLevel } from "./utils/levelGenerator";
+import {
+  generateRandomLevelFunc,
+  validateLevel,
+  checkLevelSolvability, // Added import
+} from "./utils/levelGenerator";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -360,10 +364,31 @@ function App() {
 
   // 验证关卡
   const validateCurrentLevel = () => {
-    const level: LevelData = JSON.parse(jsonOutput);
-    const result = validateLevel(level);
-    console.log("🚀 ~ validateCurrentLevel ~ result:", result);
-    setValidationResult(result);
+    try {
+      const level: LevelData = JSON.parse(jsonOutput);
+      const result = validateLevel(level);
+      setValidationResult(result);
+    } catch (e) {
+      message.error("Invalid JSON format");
+    }
+  };
+
+  // 新增：手动检查关卡是否可解
+  const handleCheckSolvability = () => {
+    try {
+      const level: LevelData = JSON.parse(jsonOutput);
+      const isSolvable = checkLevelSolvability(level);
+      if (isSolvable) {
+        message.success("Level is solvable! All snakes can escape.");
+      } else {
+        message.error(
+          "Level is NOT solvable. Check the 'Validate Level' results for details."
+        );
+        validateCurrentLevel(); // 自动运行验证以显示详情
+      }
+    } catch (e) {
+      message.error("Invalid JSON format");
+    }
   };
 
   // 复用的导入逻辑（修改为接受数据参数）
@@ -736,9 +761,11 @@ function App() {
   return (
     <div
       onMouseUp={handleMouseUp}
-      style={{ minHeight: "100vh", width: "100vw", overflow: "hidden" }}
+      style={{ minHeight: "100vh", maxWidth: "100%", overflowX: "hidden" }} // 修复：使用 maxWidth 避免全局横向滚动
     >
-      <Row style={{ height: "100vh" }}>
+      <Row style={{ height: "100vh", width: "100%", margin: 0 }}>
+        {" "}
+        {/* 修复：确保 Row 不超出页面 */}
         {/* 左侧：画板和工具栏 */}
         <Col
           span={16}
@@ -991,16 +1018,20 @@ function App() {
                     </Radio.Group>
                   </Col>
                   <Col>
-                    <Button onClick={generateRandomLevel}>
-                      Generate Random Level
-                    </Button>
+                    <Space>
+                      <Button onClick={generateRandomLevel}>
+                        Generate Random Level
+                      </Button>
+                      <Button type="dashed" onClick={handleCheckSolvability}>
+                        Check Solvability 🔍
+                      </Button>
+                    </Space>
                   </Col>
                 </Row>
               </Space>
             </div>
           </Space>
         </Col>
-
         {/* 右侧：关卡列表和JSON编辑器 */}
         <Col
           span={8}

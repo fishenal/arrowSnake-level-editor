@@ -11,6 +11,16 @@ type LevelData = {
 };
 
 /**
+ * 暴露给外部调用的解决方案检查函数
+ * 自动判断游戏是否可以完成
+ * @param level 需要验证的关卡数据
+ */
+export function checkLevelSolvability(level: LevelData): boolean {
+  const result = simulateAndCheck(level);
+  return result.canAllLeave;
+}
+
+/**
  * 随机生成关卡的函数 (优化版：增加难度和依赖性)
  * 策略：尝试构建依赖链，优先生成阻挡现有蛇路径的新蛇。
  */
@@ -256,6 +266,7 @@ function generateSnakePath(
 /**
  * 模拟蛇移动并检查是否所有蛇能离开面板
  * 逻辑优化：只要蛇能完全离开面板（路径上无阻挡），就直接移除该蛇。
+ * 包含对 Block (障碍) 和 IcePlate (冰块变向) 的支持。
  * @param level 关卡数据
  * @returns { canAllLeave: boolean; details: string[] } 是否能全部离开和详情
  */
@@ -282,13 +293,16 @@ function simulateAndCheck(level: LevelData): {
     })),
   }));
 
-  // 网格占用状态 (key: "row,col", value: "block" | "snake")
-  const grid = new Map<string, string>();
+  // 网格占用状态 (key: "row,col", value: snakeID | "block")
+  // 使用 number 类型存储 snakeID，字符串 "block" 表示障碍块
+  const grid = new Map<string, number | string>();
+
   blocks.forEach((b) =>
     grid.set(`${Math.round(b.row)},${Math.round(b.col)}`, "block")
   );
+
   currentPaths.forEach((snake) => {
-    snake.cells.forEach((pos) => grid.set(`${pos.row},${pos.col}`, "snake"));
+    snake.cells.forEach((pos) => grid.set(`${pos.row},${pos.col}`, snake.id));
   });
 
   // 冰块方向查找表
@@ -352,12 +366,15 @@ function simulateAndCheck(level: LevelData): {
 
         const key = `${nextRow},${nextCol}`;
 
-        // B. 撞到障碍 (Block 或 其他蛇)
-        if (grid.has(key)) {
+        // B. 撞到障碍 (Block, 其他蛇, 或者自己的身体)
+        const cellContent = grid.get(key);
+        if (cellContent !== undefined) {
+          // 修改：不再排除 cellContent === snake.id
+          // 只要路径上有东西（无论是障碍物、别的蛇还是自己的身体），蛇头都无法通过
           canExit = false;
-          blockedInfo = `Blocked at (${nextRow},${nextCol}) by ${grid.get(
-            key
-          )}`;
+          const owner =
+            cellContent === "block" ? "block" : `snake ${cellContent}`;
+          blockedInfo = `Blocked at (${nextRow},${nextCol}) by ${owner}`;
           break;
         }
 
@@ -379,7 +396,13 @@ function simulateAndCheck(level: LevelData): {
 
       // 如果能离开，移除该蛇并更新网格
       if (canExit) {
-        snake.cells.forEach((pos) => grid.delete(`${pos.row},${pos.col}`));
+        snake.cells.forEach((pos) => {
+          // 仅移除属于当前蛇的标记，避免误删（虽然理论上不会重叠）
+          const k = `${pos.row},${pos.col}`;
+          if (grid.get(k) === snake.id) {
+            grid.delete(k);
+          }
+        });
         exitOrder.push(
           `Snake ${snake.id} (Head: ${snake.cells[0].row},${snake.cells[0].col})`
         );
