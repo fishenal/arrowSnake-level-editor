@@ -59,7 +59,7 @@ function App() {
 
   // 当前选中的工具状态，新增 ice
   const [tool, setTool] = useState<"snake" | "block" | "ice" | "clear">(
-    "snake"
+    "snake",
   );
 
   // 网格数据状态
@@ -85,7 +85,7 @@ function App() {
   const [levelFiles, setLevelFiles] = useState<File[]>([]);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [currentLevelData, setCurrentLevelData] = useState<LevelData | null>(
-    null
+    null,
   );
 
   // 新增：关卡目录句柄
@@ -98,8 +98,12 @@ function App() {
 
   // 新增：难度状态
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
-    "medium"
+    "medium",
   );
+
+  // 新增：交换关卡输入
+  const [swapLevelA, setSwapLevelA] = useState<number | null>(null);
+  const [swapLevelB, setSwapLevelB] = useState<number | null>(null);
 
   // 初始化网格
   useEffect(() => {
@@ -123,7 +127,7 @@ function App() {
       snake.cells.map((cellIndex) => ({
         row: Math.floor(cellIndex / cols),
         col: cellIndex % cols,
-      }))
+      })),
     );
 
     const blocks: { row: number; col: number }[] = [];
@@ -304,7 +308,7 @@ function App() {
       message.success("Target directory selected.");
     } catch (e) {
       message.error(
-        "Failed to select directory. Ensure your browser supports File System Access API."
+        "Failed to select directory. Ensure your browser supports File System Access API.",
       );
       console.error(e);
     }
@@ -345,6 +349,63 @@ function App() {
     }
   };
 
+  // 新增：交换两个关卡文件内容（例如 level_6 与 level_7）
+  const swapLevelFiles = async () => {
+    if (!levelsDirHandle) {
+      message.error("Please select a levels directory first.");
+      return;
+    }
+
+    if (!swapLevelA || !swapLevelB || swapLevelA < 1 || swapLevelB < 1) {
+      message.error("Please enter two valid level numbers.");
+      return;
+    }
+
+    if (swapLevelA === swapLevelB) {
+      message.error("Please choose two different levels.");
+      return;
+    }
+
+    const fileAName = `level_${swapLevelA}.json`;
+    const fileBName = `level_${swapLevelB}.json`;
+
+    try {
+      const [fileAHandle, fileBHandle] = await Promise.all([
+        levelsDirHandle.getFileHandle(fileAName),
+        levelsDirHandle.getFileHandle(fileBName),
+      ]);
+
+      const [contentA, contentB] = await Promise.all([
+        (await fileAHandle.getFile()).text(),
+        (await fileBHandle.getFile()).text(),
+      ]);
+
+      const writableA = await fileAHandle.createWritable();
+      await writableA.write(contentB);
+      await writableA.close();
+
+      const writableB = await fileBHandle.createWritable();
+      await writableB.write(contentA);
+      await writableB.close();
+
+      message.success(`Swapped ${fileAName} and ${fileBName}.`);
+      await refreshLevelFiles(levelsDirHandle);
+
+      // 如果当前正在编辑的是被交换文件，重新加载以显示最新内容
+      if (selectedLevel === fileAName || selectedLevel === fileBName) {
+        const currentHandle =
+          await levelsDirHandle.getFileHandle(selectedLevel);
+        const currentFile = await currentHandle.getFile();
+        await loadLevel(currentFile);
+      }
+    } catch (e) {
+      message.error(
+        `Failed to swap levels. Ensure ${fileAName} and ${fileBName} exist.`,
+      );
+      console.error(e);
+    }
+  };
+
   // 创建新关卡
   const createNewLevel = () => {
     setSelectedLevel(null);
@@ -382,7 +443,7 @@ function App() {
         message.success("Level is solvable! All snakes can escape.");
       } else {
         message.error(
-          "Level is NOT solvable. Check the 'Validate Level' results for details."
+          "Level is NOT solvable. Check the 'Validate Level' results for details.",
         );
         validateCurrentLevel(); // 自动运行验证以显示详情
       }
@@ -570,7 +631,7 @@ function App() {
 
       // 重新查找当前蛇索引（因为数组可能变了）
       const newSnakeIndex = cleanedSnakes.findIndex(
-        (s) => s.id === currentSnakeId
+        (s) => s.id === currentSnakeId,
       );
       if (newSnakeIndex === -1) return cleanedSnakes;
 
@@ -616,7 +677,7 @@ function App() {
           ...s,
           cells: s.cells.filter((c) => c !== index),
         }))
-        .filter((s) => s.cells.length > 0)
+        .filter((s) => s.cells.length > 0),
     );
 
     setGridData((prev) => {
@@ -698,8 +759,8 @@ function App() {
         prev.map((cell) =>
           cell.snakeId === idToRemove
             ? { ...cell, snakeId: null, snakeIndex: null, type: "empty" } // 保留 ice
-            : cell
-        )
+            : cell,
+        ),
       );
     }
   };
@@ -1075,6 +1136,33 @@ function App() {
               </Col>
               <Col>
                 <Button onClick={validateCurrentLevel}>Validate Level</Button>
+              </Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col>
+                <InputNumber
+                  min={1}
+                  placeholder="Level A"
+                  value={swapLevelA ?? undefined}
+                  onChange={(val) =>
+                    setSwapLevelA(typeof val === "number" ? val : null)
+                  }
+                />
+              </Col>
+              <Col>
+                <InputNumber
+                  min={1}
+                  placeholder="Level B"
+                  value={swapLevelB ?? undefined}
+                  onChange={(val) =>
+                    setSwapLevelB(typeof val === "number" ? val : null)
+                  }
+                />
+              </Col>
+              <Col>
+                <Button onClick={swapLevelFiles} type="dashed">
+                  Swap Levels
+                </Button>
               </Col>
             </Row>
           </Space>
